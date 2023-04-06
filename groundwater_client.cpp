@@ -1,4 +1,5 @@
 #include <iostream>
+#include <cstring>
 #include <string>
 #include <stdlib.h>
 #include <unistd.h>
@@ -7,49 +8,74 @@
 #include <netdb.h>
 #include <netinet/in.h>
 
-int main()
-{
-    int sock, listener;
-    struct sockaddr_in addr;
-    char buf[1024];
-    int bytes_read;
+#define SERVER_IP "127.0.0.1"
+#define DEFAULT_PORT 1607
+#define BUFFER_SIZE 1024
+#define SERVER_CLOSE_CONNECTION_SYMBOL '#'
+#define ERROR_C "CLIENT ERROR: "
 
-    listener = socket(AF_INET, SOCK_STREAM, 0);
-    if(listener < 0)
-    {
-        perror("socket");
-        exit(1);
-    }
-    
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(3425);
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    if(bind(listener, (struct sockaddr *)&addr, sizeof(addr)) < 0)
-    {
-        perror("bind");
-        exit(2);
+bool is_client_connection_close(const char* msg);
+
+int main(int argc,char const* argv[]) {
+    int client;
+
+    struct sockaddr_in server_address;
+
+    client = socket(AF_INET, SOCK_STREAM, 0);
+    if (client < 0) {
+        std::cout << ERROR_C << "establishing socket error!" << std::endl;
+        exit(0);
     }
 
-    listen(listener, 1);
-    
-    while(1)
-    {
-        sock = accept(listener, NULL, NULL);
-        if(sock < 0)
-        {
-            perror("accept");
-            exit(3);
+    server_address.sin_port = htons(DEFAULT_PORT);
+    server_address.sin_family = AF_INET;
+    inet_pton(AF_INET, SERVER_IP, &server_address.sin_addr);
+
+    std::cout << "\n=> Client socket created." << std::endl;
+
+    int ret = connect(client, reinterpret_cast<const struct sockaddr*>(&server_address), sizeof(server_address));
+    if (ret == 0) {
+        std::cout << "=> Connection to server." << inet_ntoa(server_address.sin_addr) << " with port number: " 
+                    << DEFAULT_PORT << std::endl;
+    }
+
+    char buffer[BUFFER_SIZE];
+
+    std::cout << "=> Waitin for server confirmation..." << std::endl;
+    recv(client, buffer, BUFFER_SIZE, 0);
+    std::cout << "=> Connection established" << std::endl 
+                << "Enter " << SERVER_CLOSE_CONNECTION_SYMBOL
+                << " for end the connection." << std::endl; 
+
+    while (true) {
+        std::cout << "Client: ";
+        std::cin.getline(buffer, BUFFER_SIZE);
+        send(client, buffer, BUFFER_SIZE, 0);
+
+        if (is_client_connection_close(buffer)) {
+            break;
         }
 
-        while(1)
-        {
-            bytes_read = recv(sock, buf, 1024, 0);
-            if(bytes_read <= 0) break;
-            send(sock, buf, bytes_read, 0);
+        std::cout << "Server: ";
+        recv(client, buffer, BUFFER_SIZE, 0);
+        std::cout << buffer;
+        
+        if (is_client_connection_close(buffer)) {
+            break;
         }
-    
-        close(sock);
+        std::cout << std::endl;
     }
-    
+    close(client);
+    std::cout << "\n GoodBye..." << std::endl;
+
     return 0;
+}
+
+bool is_client_connection_close(const char* msg) {
+    for (int i = 0; i < strlen(msg); ++i) {
+        if (msg[i] == SERVER_CLOSE_CONNECTION_SYMBOL) {
+            return true;
+        }
+    }
+    return false;
 }

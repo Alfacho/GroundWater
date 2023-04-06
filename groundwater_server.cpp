@@ -1,4 +1,5 @@
 #include <iostream>
+#include <cstring>
 #include <string>
 #include <stdlib.h>
 #include <unistd.h>
@@ -8,7 +9,7 @@
 #include <netinet/in.h>
 
 #define ERROR_S "SERVER ERROR: "
-#define DEFAULT_PORT 1601
+#define DEFAULT_PORT 1607
 #define BUFFER_SIZE 1024
 #define CLIENT_CLOSE_CONNECTION_SYMBOL '#'
 
@@ -33,23 +34,23 @@ int main(int argc, char const* argv[]) {
     server_address.sin_family = AF_INET;
     server_address.sin_addr.s_addr = htons(INADDR_ANY);
 
-    int ret = bind(client, reinterpret_cast < struct sockaddr*>(&server_address), sizeof(server_address) < 0);
+    int ret = bind(client, reinterpret_cast < struct sockaddr*>(&server_address), sizeof(server_address));
 
     if (ret < 0) {
         std::cout << ERROR_S << "binding connection! Socket has already been establishing." << std::endl;
         return -1;
     }
 
-    socketlen_t size = sizeof(server_address);
+    socklen_t size = sizeof(server_address);
     std::cout << "SERVER: " << "listening clients..." << std::endl;
     listen(client, 1);
 
-    server = accept(client, reinterpret_cast < struct sockaddr* > (&server_address), &size);
+    server = accept(client, reinterpret_cast <struct sockaddr*> (&server_address), &size);
     if (server < 0) {
         std::cout << ERROR_S << "cant accepting client." << std::endl;
     }
 
-    char buffer(BUFFER_SIZE);
+    char buffer[BUFFER_SIZE];
     bool isExit = false;
     while (server > 0) {
         strcpy(buffer, "=> Server connected.\n");
@@ -64,13 +65,14 @@ int main(int argc, char const* argv[]) {
             isExit = true;
         }
 
-        while (isExit) {
+        while (!isExit) {
             std::cout << "Server: ";
             std::cin.getline(buffer, BUFFER_SIZE);
             send(server, buffer, BUFFER_SIZE, 0);
             if(is_client_connection_close(buffer)) {
                 break;
             }
+
             std::cout << "Client: ";
             recv(server,buffer, BUFFER_SIZE, 0);
             std::cout << buffer << std::endl;
