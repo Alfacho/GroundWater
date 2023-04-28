@@ -18,6 +18,7 @@
 
 int client;
 
+<<<<<<< HEAD
 bool is_client_connection_close(const char* msg, int* client);
 int msg_format(char* nick, int nick_str_size, char* buffer, int buffer_str_size, char* msg);
 void nick_format(char* buffer, char* nick);
@@ -30,6 +31,29 @@ int main(int argc,char const* argv[]) {
     char nick[NICK_SIZE];
     nick_format(buffer, nick);
     
+=======
+bool is_client_connection_close(const char* msg);
+
+void ClientHandler() {
+    char buffer[BUFFER_SIZE];
+    while (true) {
+        if (is_client_connection_close(buffer)) {
+            break;
+        }
+
+        std::cout << "Server: ";
+        recv(client, buffer, BUFFER_SIZE, 0);
+        std::cout << buffer;
+        
+        if (is_client_connection_close(buffer)) {
+            break;
+        }
+        std::cout << std::endl;
+    }
+}
+
+int main(int argc,char const* argv[]) {
+>>>>>>> da3cb94 (Server and clients)
     struct sockaddr_in server_address;
 
     client = socket(AF_INET, SOCK_STREAM, 0);
@@ -50,12 +74,19 @@ int main(int argc,char const* argv[]) {
                     << DEFAULT_PORT << std::endl << std::endl;
     }
 
+<<<<<<< HEAD
     std::thread Hand(ClientReader);
     Hand.detach();
 
     char msg[BUFFER_SIZE];
+=======
+    std::thread Hand(ClientHandler);
+
+    char buffer[BUFFER_SIZE];
+>>>>>>> da3cb94 (Server and clients)
     while (true) {
         std::cin.getline(buffer, BUFFER_SIZE);
+<<<<<<< HEAD
         std::cout << std::endl;
         while (msg_format(nick, strlen(nick), buffer, strlen(buffer), msg) == 1) {
             std::cin.getline(buffer, BUFFER_SIZE);
@@ -67,6 +98,14 @@ int main(int argc,char const* argv[]) {
             return 0;
         }
     }
+=======
+        send(client, buffer, BUFFER_SIZE, 0);
+    }
+
+    close(client);
+    Hand.join();
+    std::cout << "\n GoodBye..." << std::endl;
+>>>>>>> da3cb94 (Server and clients)
 
     return 0;
 }
