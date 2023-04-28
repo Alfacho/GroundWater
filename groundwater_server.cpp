@@ -7,17 +7,41 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <thread>
+#include <pthread.h>
 
 #define ERROR_S "SERVER ERROR: "
 #define DEFAULT_PORT 1607
 #define BUFFER_SIZE 1024
 #define CLIENT_CLOSE_CONNECTION_SYMBOL '#'
 
-bool is_client_connection_close(const char* msg);
+//Хранение подключений
+int connections[100];
+int counter = 0;
+
+void* ClientHandler(void *args) {
+    // Распаковываем тк pthread_create принимает только void *args
+    int index = *((int *) args);
+    
+    char buffer[BUFFER_SIZE];
+
+    while(true) {
+        //Читаем с сокета или ждем прочтения
+        recv(connections[index], buffer, BUFFER_SIZE, 0);
+        for (int i = 0; i < counter; i++) {
+            if (i != index) {
+                // Отправляем прочитанное всем кроме отправившего
+                send(connections[i], buffer, BUFFER_SIZE, 0);
+            }
+        }
+    }
+}
 
 int main(int argc, char const* argv[]) {
     int client;
     int server;
+    // Ссылки на потоки каждого клиента
+    pthread_t ID_threads[100];
 
     struct sockaddr_in server_address;
 
@@ -43,57 +67,27 @@ int main(int argc, char const* argv[]) {
 
     socklen_t size = sizeof(server_address);
     std::cout << "SERVER: " << "listening clients..." << std::endl;
-    listen(client, 1);
+    listen(client, SOMAXCONN);
 
-    server = accept(client, reinterpret_cast <struct sockaddr*> (&server_address), &size);
-    if (server < 0) {
-        std::cout << ERROR_S << "cant accepting client." << std::endl;
+    for (int i = 0; i < 100; i++) {
+        // Подключаем к сокету сервера клиент
+        server = accept(client, reinterpret_cast <struct sockaddr*> (&server_address), &size);
+
+        if (server <= 0) {
+            std::cout << ERROR_S << "cant accepting client." << std::endl;
+            i -= 1;
+        } else {
+            connections[i] = server;
+            counter++;
+            // Создаем новый поток для контроля за подключением
+            pthread_create(&ID_threads[i], NULL, ClientHandler, &i);
+
+            std::cout << "Client N" << i + 1 << " Connected! ID of connection: " << connections[i] << std::endl;
+        }
     }
 
-    char buffer[BUFFER_SIZE];
-    bool isExit = false;
-    while (server > 0) {
-        strcpy(buffer, "=> Server connected.\n");
-        send(server, buffer, BUFFER_SIZE, 0);
-        std::cout << "=> Connected to the client #1" << std::endl << "Enter " << CLIENT_CLOSE_CONNECTION_SYMBOL << " to end the connection\n\n";
 
-        std::cout << "Client: ";
-        recv(server, buffer, BUFFER_SIZE, 0);
-        std::cout << buffer << std::endl;
-
-        if (is_client_connection_close(buffer)) {
-            isExit = true;
-        }
-
-        while (!isExit) {
-            std::cout << "Server: ";
-            std::cin.getline(buffer, BUFFER_SIZE);
-            send(server, buffer, BUFFER_SIZE, 0);
-            if(is_client_connection_close(buffer)) {
-                break;
-            }
-
-            std::cout << "Client: ";
-            recv(server,buffer, BUFFER_SIZE, 0);
-            std::cout << buffer << std::endl;
-            if (is_client_connection_close(buffer)) {
-                break;
-            }
-        }
-        std::cout << "\n Good Bye..." << std::endl;
-        isExit = false;
-        exit(1);
-    }
     return 0;
 }
 
-bool is_client_connection_close(const char* msg) {
-    for (int i = 0; i < strlen(msg); ++i) {
-        if (msg[i] == CLIENT_CLOSE_CONNECTION_SYMBOL) {
-            return true;
-        }
-    }
-    return false;
-}
-
-//18:20
+//bySAO
