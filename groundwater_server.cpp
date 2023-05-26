@@ -11,31 +11,16 @@
 #include <pthread.h>
 
 #define ERROR_S "SERVER ERROR: "
-#define DEFAULT_PORT 1607
+#define DEFAULT_PORT 1604
 #define BUFFER_SIZE 1024
+#define NICK_SIZE 9
 #define CLIENT_CLOSE_CONNECTION_SYMBOL '#'
 
 //Хранение подключений
 int connections[100];
 int counter = 0;
 
-void* ClientHandler(void *args) {
-    // Распаковываем тк pthread_create принимает только void *args
-    int index = *((int *) args);
-    
-    char buffer[BUFFER_SIZE];
-
-    while(true) {
-        //Читаем с сокета или ждем прочтения
-        recv(connections[index], buffer, BUFFER_SIZE, 0);
-        for (int i = 0; i < counter; i++) {
-            if (i != index) {
-                // Отправляем прочитанное всем кроме отправившего
-                send(connections[i], buffer, BUFFER_SIZE, 0);
-            }
-        }
-    }
-}
+void* ClientHandler(void *args);
 
 int main(int argc, char const* argv[]) {
     int client;
@@ -66,10 +51,10 @@ int main(int argc, char const* argv[]) {
     }
 
     socklen_t size = sizeof(server_address);
-    std::cout << "SERVER: " << "listening clients..." << std::endl;
+    std::cout << "SERVER: " << "listening clients...\n" << std::endl;
     listen(client, SOMAXCONN);
 
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i <= 100; i++) {
         // Подключаем к сокету сервера клиент
         server = accept(client, reinterpret_cast <struct sockaddr*> (&server_address), &size);
 
@@ -79,15 +64,50 @@ int main(int argc, char const* argv[]) {
         } else {
             connections[i] = server;
             counter++;
+            // j нужна от непредвиденного сдвига
+            int j = i;
             // Создаем новый поток для контроля за подключением
-            pthread_create(&ID_threads[i], NULL, ClientHandler, &i);
+            pthread_create(&ID_threads[i], NULL, ClientHandler, (void*)&j);
+            pthread_detach(ID_threads[i]);
 
             std::cout << "Client N" << i + 1 << " Connected! ID of connection: " << connections[i] << std::endl;
         }
     }
 
-
     return 0;
+}
+
+void* ClientManger() {
+    /* Смотрит за участком, то есть массивом подключений и отдает комманды */
+    return 0;
+}
+
+void* ClientCleaner() {
+    /*Сортирует массив подключений*/
+    return 0;
+}
+
+void* ClientSender() {
+    /* Отправляет сообщения выбранных клиентов на участке*/
+    return 0;
+}
+
+
+
+void* ClientHandler(void *args) {
+    // Распаковываем тк pthread_create принимает только void *args
+    int index = *((int *) args);
+    char buffer[BUFFER_SIZE];
+    while(true) {
+        //Читаем с сокета или ждем прочтения
+        recv(connections[index], buffer, BUFFER_SIZE, 0);
+        for (int i = 0; i < counter; i++) {
+            if (i != index) {
+                // Отправляем прочитанное всем кроме отправившего
+                send(connections[i], buffer, BUFFER_SIZE, 0);
+            }
+        }
+    }
 }
 
 //bySAO
