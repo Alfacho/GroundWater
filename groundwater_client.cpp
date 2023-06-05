@@ -10,7 +10,7 @@
 #include <thread>
 
 #define SERVER_IP "127.0.0.1"
-#define DEFAULT_PORT 1604
+#define DEFAULT_PORT 1605
 #define BUFFER_SIZE 1024
 #define NICK_SIZE 9
 #define SERVER_CLOSE_CONNECTION_SYMBOL '#'
@@ -18,7 +18,7 @@
 
 int client;
 
-bool is_client_connection_close(const char* msg, int* client);
+bool IsClientConnectionClose(const char* msg, int* client);
 int msg_format(char* nick, int nick_str_size, char* buffer, int buffer_str_size, char* msg);
 void nick_format(char* buffer, char* nick);
 
@@ -63,7 +63,7 @@ int main(int argc,char const* argv[]) {
         }
         send(client, msg, BUFFER_SIZE, 0);
 
-        if (is_client_connection_close(buffer, &client)) {
+        if (IsClientConnectionClose(buffer, &client)) {
             return 0;
         }
     }
@@ -79,7 +79,7 @@ void ClientReader() {
     }
 }
 
-bool is_client_connection_close(const char* msg, int* client) {
+bool IsClientConnectionClose(const char* msg, int* client) {
     for (int i = 0; i < strlen(msg); ++i) {
         if (msg[i] == SERVER_CLOSE_CONNECTION_SYMBOL) {
             close(*client);
@@ -107,7 +107,7 @@ void nick_format(char* buffer, char* nick) {
     std::cout << "Please enter your nickname to continue ( 8 characters, ENG ): ";
     std::cin.getline(buffer, BUFFER_SIZE);
     while (strlen(buffer) > NICK_SIZE - 1) {
-        std::cout << "\nPlease enter your nickname to continue ( 8 characters, ENG ): ";
+        std::cout << "\nPlease enter your nickname to continue ( >> 8 CHARACTERS <<, ENG ): ";
         std::cin.getline(buffer, BUFFER_SIZE);
     }
     strcpy(nick, buffer);
