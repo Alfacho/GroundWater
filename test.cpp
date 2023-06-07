@@ -9,24 +9,19 @@
 #include <netinet/in.h>
 #include <thread>
 
-void msg_format() {
-    char n;
-    char a[1024];
-
-    std::cin >> n;
-    for (int i = 0; i < 1024; i++) {
-        a[i] = n;
-    }
-    
-
-    for (int i = 0; i < 1024; i++) {
-        std::cout << '\n' << a;
-    }
-    std::cout << std::endl;
+int print(char arr[3][1024]) {
+    std::cout << arr[1] << std::endl;
+    std::cin >> arr[1];
+    return 0;
 }
 
 int main(void) {
-    msg_format();
+    char b[3][1024];
+    char a[1024];
+    std::cin >> a;
+    std::strcpy(b[1], a);
+    print(b);
+    std::cout << "2: " << b[1];
     return 0;
 }
 
