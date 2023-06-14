@@ -11,9 +11,10 @@
 #include <pthread.h>
 #include <fcntl.h>
 
+// Сейчас вся архитектура построена только на 1 менеджере, то есть на 100 подключениях, дальше нужно перерабатывать
 #define MAX_CONNECTIONS 100
 #define ERROR_S "SERVER ERROR: "
-#define DEFAULT_PORT 1605
+#define DEFAULT_PORT 1606
 #define BUFFER_SIZE 1024
 #define NICK_SIZE 9
 #define CLIENT_CLOSE_CONNECTION_SYMBOL '#'
@@ -23,12 +24,17 @@ int connections[MAX_CONNECTIONS];
 int indexes_of_ready_connections[MAX_CONNECTIONS];
 int counter = 0;
 
+void* ClientManger(void *args);
 void* ClientHandler(void *args);
 void UnblockingSocket(int n_connection);
-int ClientSorter(int sector, int indexes_of_disconnections[100], int count_n_dis);
-int ClientSender(char msgs[100][BUFFER_SIZE], int senders_indexes[100], int subsector, int* breaker);
+int ClientSorter(int sector, int indexes_of_disconnections[100], int disconnection_counter);
+int ClientSender(char msgs[100][BUFFER_SIZE], int sender_indexes[100], int subsector, int* breaker, int* counter_of_ready_hands);
 
 int main(int argc, char const* argv[]) {
+    // Приветствие
+    system("clear");
+    system("figlet -f slant \"GroundWater\"");
+
     int client;
     int server;
     // Ссылки на потоки каждого клиента
@@ -60,7 +66,7 @@ int main(int argc, char const* argv[]) {
     std::cout << "SERVER: " << "listening clients...\n" << std::endl;
     listen(client, SOMAXCONN);
 
-    for (int i = 0; i <= 100; i++) {
+    for (int i = 0; i <= MAX_CONNECTIONS; i++) {
         // Подключаем к сокету сервера клиент
         server = accept(client, reinterpret_cast <struct sockaddr*> (&server_address), &size);
 
@@ -71,11 +77,14 @@ int main(int argc, char const* argv[]) {
             connections[i] = server;
             UnblockingSocket(i);
             counter++;
-            // j нужна от непредвиденного сдвига
-            int j = i;
             // Создаем новый поток для контроля за подключением
-            pthread_create(&ID_threads[i], NULL, ClientHandler, (void*)&j);
-            pthread_detach(ID_threads[i]);
+            if (i % 100 == 0) {
+                // создаем для непредвиденного сдвига
+                // сектора начинаются со 100 и так далее, 1 сектор контролирует 1 менеджер
+                int sector = i + 100;
+                pthread_create(&ID_threads[i/100], NULL, ClientManger, (void*)&sector);
+                pthread_detach(ID_threads[i/100]);
+            }
 
             std::cout << "Client №" << i + 1 << " CONNECTED! ID of connection: " << connections[i] << std::endl;
         }
@@ -84,45 +93,64 @@ int main(int argc, char const* argv[]) {
     return 0;
 }
 
-void* ClientManger(int sector) {
+
+// Новейшее ядро v0.2
+void* ClientManger(void *args) {
     /* Смотрит за участком, то есть массивом подключений и отдает комманды, до 100 подключений вкл */
+
+    // распаковка значения контролируемого сектора
+    int sector = *((int *) args);
+    // временный буфер и массив для сообщений 
     char buffer[BUFFER_SIZE], msgs[100][BUFFER_SIZE];
-    int senders_indexes[100];
+    // массив индексов отправителей
+    int sender_indexes[100];
+    for (int j = 0; j < 100; j++) {sender_indexes[j] = -25;}
     int indexes_of_disconnections[100];
+    // блокировщик, который указывает потокам, что цикл потока менеджера завершён
+    int breaker = 1;
+    // счетчик завершенных циклов потоков отправителей
+    int counter_of_ready_hands = 2;
+
+    std::thread hand_1(ClientSender, msgs, sender_indexes, 1, &breaker, &counter_of_ready_hands);
+    std::thread hand_2(ClientSender, msgs, sender_indexes, 2, &breaker, &counter_of_ready_hands);
+    hand_1.detach();
+    hand_2.detach();
     while(true) {
-        int count_ind_dis = 0;
-        int breaker = 0;
-        for (int j = 0; j < 100; j++) {senders_indexes[j] = -25;}
-        //!!
-        std::thread hand_1(ClientSender, msgs, senders_indexes, 1, &breaker);
-        std::thread hand_2(ClientSender, msgs, senders_indexes, 2, &breaker);
-        //!!
-        for (int i = sector - 100; i < counter; i++) {
-            int socket_status = recv(connections[i], buffer, BUFFER_SIZE, 0);
+        // проверяем завершен ли прошлый цикл отправителей
+        if (counter_of_ready_hands == 2) {
+            counter_of_ready_hands = 0;
+            int message_and_sender_counter = 0;
+            int disconnection_counter = 0;
+            // разблокировываем потоки сендеров
+            breaker = 0;
 
-            // Есть сообщение, передаем ф-ции потока чтения чтения
-            if (socket_status > 0) {
-                std::strcpy(msgs[i - (sector - 100)], buffer);
-                senders_indexes[i - (sector - 100)] = i;
-            } else {
-                // Сокет закрыт на другом конце соединения, поэтому закрываем здесь
-                if (socket_status == 0) {
-                    std::cout << "Client №" << i + 1 << " LEFT! ID of connection: " << connections[i] << std::endl;
-                }
-                // Ошибка чтения сокета, закрываем сокет
-                if (socket_status < 0) {
-                    std::cout << "Client №" << i + 1 << " IS NOT READABLE! ID of connection: " << connections[i] << std::endl;
-                }
-                close(connections[i]);
-                indexes_of_disconnections[count_ind_dis] = i;
-                count_ind_dis++;
-            }  
+            for (int i = sector - 100; i < counter; i++) {
+                int socket_status = recv(connections[i], buffer, BUFFER_SIZE, 0);
+
+                // Есть сообщение, передаем ф-ции потока чтения чтения
+                if (socket_status > 0) {
+                    std::strcpy(msgs[message_and_sender_counter], buffer);
+                    sender_indexes[message_and_sender_counter] = i;
+                    message_and_sender_counter++;
+                } else {
+                    // Сокет закрыт на другом конце соединения, поэтому закрываем здесь
+                    if (socket_status == 0) {
+                        std::cout << "Client №" << i + 1 << " LEFT! ID of connection: " << connections[i] << std::endl;
+                    }
+                    // Ошибка чтения сокета, закрываем сокет
+                    if (socket_status < 0) {
+                        std::cout << "Client №" << i + 1 << " IS NOT READABLE! ID of connection: " << connections[i] << std::endl;
+                    }
+                    close(connections[i]);
+                    indexes_of_disconnections[disconnection_counter] = i;
+                    disconnection_counter++;
+                }  
+            }
+            // даем команду потокам сендеров 
+            breaker = 1;
+
+            ClientSorter(sector, indexes_of_disconnections, disconnection_counter);
         }
-        breaker = 1;
-        hand_1.join();
-        hand_2.join();
-
-        ClientSorter(sector, indexes_of_disconnections, count_ind_dis);
     }
     return 0;
 }
@@ -132,16 +160,18 @@ void UnblockingSocket(int n_connection) {
         int nonBlocking = 1;
         if (fcntl(n_connection, F_SETFL, O_NONBLOCK, nonBlocking) == -1) {
             std::cout << "FAILED TO SET NON-BLOCKING SOCKET №" << n_connection << std::endl;
+            // нужно отключить клиента из сессии
         }
 }
 
-int ClientSorter(int sector, int indexes_of_disconnections[100], int count_ind_dis) {
+int ClientSorter(int sector, int indexes_of_disconnections[100], int disconnection_counter) {
     /*Сортирует массив подключений от закрытых сокетов*/
     int copy_arr[100];
     int c = 0;
+    int c1 = 0;
     for (int i = sector - 100; i < sector; i++) {
         int fl = 0;
-        for (int j = 0; j < count_ind_dis; j++) {
+        for (int j = 0; j < disconnection_counter; j++) {
             if (i == indexes_of_disconnections[j]) {
                 fl = 1;
             }
@@ -153,49 +183,58 @@ int ClientSorter(int sector, int indexes_of_disconnections[100], int count_ind_d
     }
 
     for (int i = sector - 100; i < (sector - 100 + c); i++) {
-        connections[i] = copy_arr[i];
+        connections[i] = copy_arr[c1];
+        c1++;
     }
     return 0;
 }
 
-int ClientSender(char msgs[100][BUFFER_SIZE], int senders_indexes[100], int subsector, int* breaker) {
+int ClientSender(char msgs[100][BUFFER_SIZE], int sender_indexes[100], int subsector, int* breaker, int* counter_of_ready_hands) {
     /* Отправляет сообщения выбранных клиентов на участке, до 50 клиентов вкл*/
-    int index;
-    int index_edge;
-
-    if (subsector == 1) {
-        index = 0;
-        index_edge = 50;
-    } else {
-        index = 50;
-        index_edge = 100;
+    // Подсектор это до 50 подключений входящих в сектор менеджера, в отличии от секторов имеют свои индексы
+    int subsector_start = 0;
+    int subsector_finish = 50;
+    if (subsector == 2) {
+        subsector_start += 50;
+        subsector_finish += 50;
     }
 
-    for (index; index < index_edge; index++) {
-        // тормозит процесс пока не получит сообщение или останову, проверяю по индексу отправителя, если его нет то стоит -25
-        while (-25 == senders_indexes[index] && *breaker != 1) {}
-
-        // не заканчиваю алгоритм раньше, тк менеджер может закончить раньше отправителя
-        if (-25 == senders_indexes[index]) {
-            for (int i = 0; i < counter; i++) {
-                // Отправляем прочитанное всем кроме отправившего
-                if (i != senders_indexes[index]) {
-                    send(connections[i], msgs[index], BUFFER_SIZE, 0);
+    while (true) {
+        // ждем пока не дана команда начать цикл 
+        if (*breaker != 1) {
+            // каждый цикл начинается с начала подсектора, обновляем его
+            int index_subsector = subsector_start;
+            // пока (нет остановы или есть сообщения) и не достигли края подсектора читаем сообщения
+            while (((*breaker != 1) || (sender_indexes[index_subsector] != -25))  && (index_subsector < subsector_finish)) {
+                // то что нет остановы и нет края, не значит, что есть сообщение
+                if (sender_indexes[index_subsector] != -25) {
+                    for (int i = 0; i < counter; i++) {
+                        if (i != sender_indexes[index_subsector]) {
+                            send(connections[i], msgs[index_subsector], BUFFER_SIZE, 0);
+                        }
+                    }
+                    // очищаем массив, тк подключение больше не ждет прочтения, ведь сообщение не актульно
+                    sender_indexes[index_subsector] = -25;
+                    // сдвигаемся, если сообщение отправлено
+                    // !! ИНДЕКСАЦИЯ MSG И SENDER_INDEXES СООТВЕТСТВУЕТ ДРУГ ДРУГУ И ПОСЛЕДОВАТЕЛЬНА !! ЗАМЕНИ !!
+                    index_subsector++;
                 }
             }
+            *counter_of_ready_hands++;
         }
     }
     return 0;
 }
 
 
-
+// старенькое ядро сервера
+// устарело тк расходует целый поток на 1 подключение
 void* ClientHandler(void *args) {
     // Распаковываем тк pthread_create принимает только void *args
     int index = *((int *) args);
     char buffer[BUFFER_SIZE];
     while(true) {
-        //Читаем с сокета или ждем прочтения
+        //Читаем из сокета или ждем прочтения
         if (recv(connections[index], buffer, BUFFER_SIZE, 0) > 0) {
             for (int i = 0; i < counter; i++) {
                 if (i != index) {

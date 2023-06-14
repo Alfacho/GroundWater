@@ -10,7 +10,7 @@
 #include <thread>
 
 #define SERVER_IP "127.0.0.1"
-#define DEFAULT_PORT 1605
+#define DEFAULT_PORT 1606
 #define BUFFER_SIZE 1024
 #define NICK_SIZE 9
 #define SERVER_CLOSE_CONNECTION_SYMBOL '#'
