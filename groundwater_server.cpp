@@ -14,7 +14,7 @@
 // Сейчас вся архитектура построена только на 1 менеджере, то есть на 100 подключениях, дальше нужно перерабатывать
 #define MAX_CONNECTIONS 100
 #define ERROR_S "SERVER ERROR: "
-#define DEFAULT_PORT 1606
+#define DEFAULT_PORT 1605 // 9
 #define BUFFER_SIZE 1024
 #define NICK_SIZE 9
 #define CLIENT_CLOSE_CONNECTION_SYMBOL '#'
@@ -89,6 +89,8 @@ int main(int argc, char const* argv[]) {
             std::cout << "Client №" << i + 1 << " CONNECTED! ID of connection: " << connections[i] << std::endl;
         }
     }
+    // БАГ, цикл не учитывает отключившиеся клиенты!!! Кроме не подключившихся. Нужно использовать переменную counter
+    // БАГ, программа завершается после достижения максимума!
 
     return 0;
 }
@@ -115,6 +117,7 @@ void* ClientManger(void *args) {
     std::thread hand_2(ClientSender, msgs, sender_indexes, 2, &breaker, &counter_of_ready_hands);
     hand_1.detach();
     hand_2.detach();
+
     while(true) {
         // проверяем завершен ли прошлый цикл отправителей
         if (counter_of_ready_hands == 2) {
@@ -124,7 +127,7 @@ void* ClientManger(void *args) {
             // разблокировываем потоки сендеров
             breaker = 0;
 
-            for (int i = sector - 100; i < counter; i++) {
+            for (int i = sector - 100; i < sector; i++) {
                 int socket_status = recv(connections[i], buffer, BUFFER_SIZE, 0);
 
                 // Есть сообщение, передаем ф-ции потока чтения чтения
@@ -146,10 +149,14 @@ void* ClientManger(void *args) {
                     disconnection_counter++;
                 }  
             }
-            // даем команду потокам сендеров 
+            // даем команду потокам сендеров на завершение
             breaker = 1;
 
             ClientSorter(sector, indexes_of_disconnections, disconnection_counter);
+        } else {
+            // спаааать 
+            usleep(10);
+            // Можно снизить задержку и вставив считыватель комманд серверной консоли
         }
     }
     return 0;
@@ -201,11 +208,11 @@ int ClientSender(char msgs[100][BUFFER_SIZE], int sender_indexes[100], int subse
 
     while (true) {
         // ждем пока не дана команда начать цикл 
-        if (*breaker != 1) {
+        if (*breaker == 0) {
             // каждый цикл начинается с начала подсектора, обновляем его
             int index_subsector = subsector_start;
             // пока (нет остановы или есть сообщения) и не достигли края подсектора читаем сообщения
-            while (((*breaker != 1) || (sender_indexes[index_subsector] != -25))  && (index_subsector < subsector_finish)) {
+            while (((*breaker == 0) || (sender_indexes[index_subsector] != -25))  && (index_subsector < subsector_finish)) {
                 // то что нет остановы и нет края, не значит, что есть сообщение
                 if (sender_indexes[index_subsector] != -25) {
                     for (int i = 0; i < counter; i++) {
@@ -216,11 +223,19 @@ int ClientSender(char msgs[100][BUFFER_SIZE], int sender_indexes[100], int subse
                     // очищаем массив, тк подключение больше не ждет прочтения, ведь сообщение не актульно
                     sender_indexes[index_subsector] = -25;
                     // сдвигаемся, если сообщение отправлено
-                    // !! ИНДЕКСАЦИЯ MSG И SENDER_INDEXES СООТВЕТСТВУЕТ ДРУГ ДРУГУ И ПОСЛЕДОВАТЕЛЬНА !! ЗАМЕНИ !!
+                    // !! ИНДЕКСАЦИЯ MSG И SENDER_INDEXES СООТВЕТСТВУЕТ ДРУГ ДРУГУ И ПОСЛЕДОВАТЕЛЬНА !!
                     index_subsector++;
+                } else {
+                    std::cout << "none" << std::endl;
                 }
+                // ошибка в цикле
+                usleep(1000);
+                // ошибка в цикле
             }
+            std::cout << "THE END!" << std::endl;
             *counter_of_ready_hands++;
+        } else {
+            usleep(2);
         }
     }
     return 0;
@@ -250,4 +265,5 @@ void* ClientHandler(void *args) {
     }
 }
 
+// война с ящерами
 //bySAO

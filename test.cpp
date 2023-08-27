@@ -9,19 +9,20 @@
 #include <netinet/in.h>
 #include <thread>
 
-int print(char arr[3][1024]) {
-    std::cout << arr[1] << std::endl;
-    std::cin >> arr[1];
-    return 0;
+void singularity(void) {
+    int a = 0;
+    while (a == 0) {
+        1;
+    }
 }
 
 int main(void) {
-    char b[3][1024];
-    char a[1024];
-    std::cin >> a;
-    std::strcpy(b[1], a);
-    print(b);
-    std::cout << "2: " << b[1];
+    while (true) {
+        if (0 != 0) {
+            1 + 1;
+        }
+        usleep(1);
+    }
     return 0;
 }
 
