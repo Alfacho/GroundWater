@@ -66,31 +66,34 @@ int main(int argc, char const* argv[]) {
     std::cout << "SERVER: " << "listening clients...\n" << std::endl;
     listen(client, SOMAXCONN);
 
-    for (int i = 0; i <= MAX_CONNECTIONS; i++) {
-        // Подключаем к сокету сервера клиент
-        server = accept(client, reinterpret_cast <struct sockaddr*> (&server_address), &size);
+    while (true) {
+        if (counter < MAX_CONNECTIONS) {
+            // Подключаем к сокету сервера клиент
+            server = accept(client, reinterpret_cast <struct sockaddr*> (&server_address), &size);
 
-        if (server <= 0) {
-            std::cout << ERROR_S << "cant accepting client." << std::endl;
-            i -= 1;
-        } else {
-            connections[i] = server;
-            UnblockingSocket(i);
-            counter++;
-            // Создаем новый поток для контроля за подключением
-            if (i % 100 == 0) {
-                // создаем для непредвиденного сдвига
-                // сектора начинаются со 100 и так далее, 1 сектор контролирует 1 менеджер
-                int sector = i + 100;
-                pthread_create(&ID_threads[i/100], NULL, ClientManger, (void*)&sector);
-                pthread_detach(ID_threads[i/100]);
+            if (server <= 0) {
+                std::cout << ERROR_S << "cant accepting client." << std::endl;
+            } else {
+                connections[counter] = server;
+                UnblockingSocket(counter);
+                // Создаем новый поток для контроля за подключением
+                if ((counter + 1)% 100 == 0) {
+                    // создаем для непредвиденного сдвига
+                    // сектора начинаются со 100 и так далее, 1 сектор контролирует 1 менеджер
+                    int sector = counter + 100;
+                    pthread_create(&ID_threads[counter/100], NULL, ClientManger, (void*)&sector);
+                    pthread_detach(ID_threads[counter/100]);
+                }
+
+                std::cout << "Client №" << counter + 1 << " CONNECTED! ID of connection: " << connections[counter] << std::endl;
+                counter++;
+
+                if ((counter + 1) == 100) {std::cout << "MAXIMUM CONNECTIONS RECHED: " << (counter + 1) << '/' << MAX_CONNECTIONS << std::endl;}
             }
-
-            std::cout << "Client №" << i + 1 << " CONNECTED! ID of connection: " << connections[i] << std::endl;
+        } else {
+            usleep(1000);
         }
     }
-    // БАГ, цикл не учитывает отключившиеся клиенты!!! Кроме не подключившихся. Нужно использовать переменную counter
-    // БАГ, программа завершается после достижения максимума!
 
     return 0;
 }
@@ -145,6 +148,7 @@ void* ClientManger(void *args) {
                         std::cout << "Client №" << i + 1 << " IS NOT READABLE! ID of connection: " << connections[i] << std::endl;
                     }
                     close(connections[i]);
+                    counter--;
                     indexes_of_disconnections[disconnection_counter] = i;
                     disconnection_counter++;
                 }  
@@ -196,6 +200,7 @@ int ClientSorter(int sector, int indexes_of_disconnections[100], int disconnecti
     return 0;
 }
 
+// bag
 int ClientSender(char msgs[100][BUFFER_SIZE], int sender_indexes[100], int subsector, int* breaker, int* counter_of_ready_hands) {
     /* Отправляет сообщения выбранных клиентов на участке, до 50 клиентов вкл*/
     // Подсектор это до 50 подключений входящих в сектор менеджера, в отличии от секторов имеют свои индексы
