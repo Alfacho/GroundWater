@@ -109,7 +109,9 @@ void* ClientManger(void *args) {
     char buffer[BUFFER_SIZE], msgs[100][BUFFER_SIZE];
     // массив индексов отправителей
     int sender_indexes[100];
-    for (int j = 0; j < 100; j++) {sender_indexes[j] = -25;}
+    for (int j = 0; j < 100; j++) {
+        sender_indexes[j] = -25;
+    }
     int indexes_of_disconnections[100];
     // блокировщик, который указывает потокам, что цикл потока менеджера завершён
     int breaker = 1;
@@ -130,11 +132,17 @@ void* ClientManger(void *args) {
             // разблокировываем потоки сендеров
             breaker = 0;
 
-            for (int i = sector - 100; i < sector; i++) {
+            // Устанавливаем край работы менеджера
+            int edge = sector;
+            if (sector > counter) {
+                edge = counter;
+            }
+            for (int i = sector - 100; i < edge; i++) {
                 int socket_status = recv(connections[i], buffer, BUFFER_SIZE, 0);
 
                 // Есть сообщение, передаем ф-ции потока чтения чтения
                 if (socket_status > 0) {
+                    // !! БАГ, если соединение живо, то не хначит, что есть сообщение !!
                     std::strcpy(msgs[message_and_sender_counter], buffer);
                     sender_indexes[message_and_sender_counter] = i;
                     message_and_sender_counter++;
